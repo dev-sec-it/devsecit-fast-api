@@ -1,6 +1,36 @@
 # devsecit-fast-api v2 API Documentation
 
 
+## Get started Linux
+
+```
+git clone https://github.com/dev-sec-it/devsecit-fast-api
+
+cd devsecit-fast-api 
+
+chmod +x ./*
+
+./deploy.sh 
+```
+
+## Get started Windows
+
+```
+git clone https://github.com/dev-sec-it/devsecit-fast-api
+
+cd devsecit-fast-api 
+
+devsecit-api.exe --port (enter your porn number like 3000)
+
+```
+
+## Check health 
+
+```
+http://[IP_ADDRESS]/health # Sample http://192.168.1.100:300/health
+```
+
+
 ## Authentication & Headers
 
 Every API request requires the `Content-Type` header and a dynamic **Bearer Token** passed in the `Authorization` header.
