@@ -9,13 +9,7 @@ Every API request requires the `Content-Type` header and a dynamic **Bearer Toke
 ```http
 Content-Type: application/json
 Authorization: Bearer YOUR_GENERATED_TOKEN
-```
-
-### Token Structure & Generation
-The Bearer Token is a multi-part segmented token containing authentication and expiry metadata:
-```text
-{salt}/a{double_base64_db_name}/i{triple_base64_db_pass}/o{base64_expiry_date}/u{quadruple_base64_user}
-```
+``` 
 
 You can generate tokens via `gen_token`:
 ```http
