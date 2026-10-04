@@ -1,0 +1,16 @@
+[Unit]
+Description=DevSecIt Rust API High Performance Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/devsecit-api
+ExecStart=/opt/devsecit-api/devsecit-rust-api --port 3000
+Restart=always
+RestartSec=5s
+EnvironmentFile=-/opt/devsecit-api/.env
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
