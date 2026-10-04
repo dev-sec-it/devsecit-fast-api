@@ -1,4 +1,4 @@
-# DevSecIt v2 API Documentation
+# devsecit-fast-api v2 API Documentation
 
 
 ## Authentication & Headers
