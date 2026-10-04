@@ -20,7 +20,7 @@ git clone https://github.com/dev-sec-it/devsecit-fast-api
 
 cd devsecit-fast-api 
 
-devsecit-api.exe --port (enter your porn number like 3000)
+devsecit-api.exe --port (enter your port number like 3000)
 
 ```
 
