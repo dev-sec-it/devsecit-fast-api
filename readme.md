@@ -1,33 +1,40 @@
-# devsecit-fast-api v2 API Documentation
+# 🛡️ DEV SEC IT — Fast API Engine & Control Panel
+> High-performance, stateless REST API server and desktop management engine with native dual MySQL & PostgreSQL database drivers.
 
+**Organization**: [DEV SEC IT](https://github.com/dev-sec-it) | **Version**: 2.0.0 | **License**: MIT
 
-## Get started Linux
+---
 
-```
+### ✨ Key Highlights
+- ⚡ **Ultra-Fast & Memory Safe**: Built with pure Rust, Axum, and SQLx.
+- 🗄️ **Dual Database Support**: Seamless on-demand pooling for MySQL and PostgreSQL.
+- 🔒 **Encrypted Token Security**: Zero-trust multi-tenant credential verification.
+- 🛡️ **Built-in SQL Firewall**: Automated blocking of malicious tautology conditions and injection bypasses.
+- 🖥️ **Cross-Platform**: Complete support for Linux servers (Systemd daemon) and Windows Desktop GUI.
+
+---
+
+## 🚀 Get Started
+
+### Linux Server
+```bash
 git clone https://github.com/dev-sec-it/devsecit-fast-api
-
-cd devsecit-fast-api 
-
+cd devsecit-fast-api/linux
 chmod +x ./*
-
-./deploy.sh 
+./deploy.sh
 ```
 
-## Get started Windows
-
-```
+### Windows
+```text
 git clone https://github.com/dev-sec-it/devsecit-fast-api
-
-cd devsecit-fast-api 
-
-devsecit-api.exe --port (enter your port number like 3000)
-
+cd devsecit-fast-api/windows
+Double click on windows.exe to install
 ```
 
 ## Check health 
 
 ```
-http://[IP_ADDRESS]/health # Sample http://192.168.1.100:300/health
+http://[IP_ADDRESS]/health # Sample http://192.168.1.100:3000/health
 ```
 
 
@@ -50,7 +57,7 @@ GET /gen_token?db_name=your_db&db_pass=your_password&user=your_user&expiry=7
 {
     "status": "success",
     "code": "200",
-    "token": "salt_1700000000/aWW99kYg==/iWW91clYXNz.../oMjgtAtMjAyNg==/uWW9l91c2Vy..."
+    "token": "<YOUR_GENERATED_TOKEN>"
 }
 ```
 
