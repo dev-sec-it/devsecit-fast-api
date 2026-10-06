@@ -34,7 +34,7 @@ Double click on windows.exe to install
 ## Check health 
 
 ```
-http://[IP_ADDRESS]/health # Sample http://192.168.1.100:3000/health
+http://[IP_ADDRESS]/health # Sample http://192.168.1.100:8899/health
 ```
 
 

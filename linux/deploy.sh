@@ -36,11 +36,11 @@ done
 
 # If port not provided via arguments, interactively ask the user
 if [ -z "${PORT}" ]; then
-  read -p "Enter port number to deploy [default: 3000]: " USER_PORT
+  read -p "Enter port number to deploy [default: 8899]: " USER_PORT
   if [ -n "${USER_PORT}" ]; then
     PORT="${USER_PORT}"
   else
-    PORT="3000"
+    PORT="8899"
   fi
 fi
 
