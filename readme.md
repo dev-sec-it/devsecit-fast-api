@@ -8,8 +8,9 @@
 ### ✨ Key Highlights
 - ⚡ **Ultra-Fast & Memory Safe**: Built with pure Rust, Axum, and SQLx.
 - 🗄️ **Dual Database Support**: Seamless on-demand pooling for MySQL and PostgreSQL.
-- 🔒 **Encrypted Token Security**: Zero-trust multi-tenant credential verification.
-- 🛡️ **Built-in SQL Firewall**: Automated blocking of malicious tautology conditions and injection bypasses.
+- 🔒 **Encrypted Token Security**: Zero-trust multi-tenant credential verification with live revocation and rotation.
+- 🛡️ **Structured Condition Predicates**: Parameterized SQL queries eliminate injection structurally.
+- 📦 **Transactions & Bcrypt**: Full atomic batch operations and native bcrypt password hashing.
 - 🖥️ **Cross-Platform**: Complete support for Linux servers (Systemd daemon) and Windows Desktop GUI.
 
 ---
@@ -26,17 +27,16 @@ chmod +x ./*
 
 ### Windows
 ```text
-git clone https://github.com/dev-sec-it/devsecit-fast-api
-cd devsecit-fast-api/windows
 Double click on windows.exe to install
 ```
 
 ## Check health 
 
 ```
-http://[IP_ADDRESS]/health # Sample http://192.168.1.100:8899/health
+http://[IP_ADDRESS]:8899/health
 ```
 
+---
 
 ## Authentication & Headers
 
@@ -48,32 +48,54 @@ Content-Type: application/json
 Authorization: Bearer YOUR_GENERATED_TOKEN
 ``` 
 
-You can generate tokens via `gen_token`:
+### Token Generation (`POST /token` or `POST /gen_token`)
+Token issuance is POST-only with a JSON payload (`GET` returns `405 Method Not Allowed`, rate-limited to 20 req/min).
+
 ```http
-GET /gen_token?db_name=your_db&db_pass=your_password&user=your_user&expiry=7
+POST /token
+Content-Type: application/json
+
+{
+    "db_name": "your_db",
+    "db_pass": "your_password",
+    "user": "your_user",
+    "driver": "mysql",
+    "expiry": 7
+}
 ```
+
 **Response:**
 ```json
 {
     "status": "success",
-    "code": "200",
-    "token": "<YOUR_GENERATED_TOKEN>"
+    "code": 200,
+    "token": "<YOUR_GENERATED_TOKEN>",
+    "driver": "mysql"
 }
 ```
 
 > [!IMPORTANT]
 > - Do not pass tokens inside the JSON request body. Body tokens will be rejected with HTTP 401.
 > - Ensure token expiry has not passed (`d-m-Y` comparison).
+> - Presenting a revoked token will return `401 {"error_code": "TOKEN_REVOKED"}`.
 
 ---
 
-## Security & Condition Constraints
+## Condition Syntax & Rules
 
-The API strictly prohibits condition injection and tautological bypass queries. The following condition values are blocked by the firewall:
-- `1=1`
-- `id>0` / `id > '0'`
-- `true`
-- Empty or whitespace conditions for destructive methods (`GET`, `UPDATE`, `DELETE`)
+String conditions are disabled. All conditions must be structured JSON objects and are evaluated with bound parameters:
+
+```jsonc
+{ "email": "john@example.com" }                      // Equality (=)
+{ "age": { "op": ">=", "value": 18 } }                // Comparison (=, !=, <, <=, >, >=, like)
+{ "id": { "op": "in", "value": [1, 2, 3] } }          // Set membership (in, not_in)
+{ "deleted_at": { "op": "is_null" } }                 // Null check (is_null, is_not_null)
+{ "$or": true, "email": "a@b.c", "role": "admin" }   // Join clauses with OR
+```
+
+- Any attempt to send a raw SQL string condition returns `400 {"error_code": "RAW_SQL_DISABLED"}`.
+- Reads (`GET`, `GET_SELECTED`) and mutations (`UPDATE`, `DELETE`) require a non-empty condition. An empty condition returns `400 {"error_code": "CONDITION_REQUIRED"}`.
+- Type coercion on INT columns is strictly validated. Sending non-integer strings to integer columns returns `400 {"error_code": "INVALID_CONDITION_VALUE"}`.
 
 ---
 
@@ -82,7 +104,7 @@ The API strictly prohibits condition injection and tautological bypass queries. 
 ---
 
 ### 1. Insert Data (`INSERT` / `PUT`)
-Inserts a new record into the specified table. If an optional `condition` is supplied, the API checks whether matching data exists before inserting.
+Inserts a new record into the specified table. If the table or columns do not exist, they are auto-created. If an optional `condition` object is supplied, the API checks whether matching data exists before inserting.
 
 **Request Body (JSON):**
 ```json
@@ -92,11 +114,11 @@ Inserts a new record into the specified table. If an optional `condition` is sup
     "name": "John Doe",
     "email": "john@example.com",
     "phone": "1234567890",
-    "condition": "email='john@example.com'"
+    "condition": { "email": "john@example.com" }
 }
 ```
 
-**Success Response (Status 200 - Inserted):**
+**Success Response (Status 200):**
 ```json
 {
     "err": false,
@@ -107,42 +129,31 @@ Inserts a new record into the specified table. If an optional `condition` is sup
     "id": 15,
     "data": [
         {
-            "id": "15",
+            "id": 15,
             "name": "John Doe",
             "email": "john@example.com",
             "phone": "1234567890",
-            "date": "04-10-2026",
+            "date": "18-10-2026",
             "time": "11:05:00 AM"
         }
     ]
 }
 ```
 
-**Conflict Response (Status 201 - Already Exists):**
-```json
-{
-    "status": 201,
-    "table": "users",
-    "msg": "Data already exists",
-    "data": {
-        "id": "12",
-        "name": "John Doe",
-        "email": "john@example.com"
-    }
-}
-```
-
 ---
 
 ### 2. Get Data (`GET`)
-Fetches all matching records from a table. The `password` field is automatically redacted from the response for security.
+Fetches records matching the mandatory condition. Supports pagination and opt-in column redaction.
 
 **Request Body (JSON):**
 ```json
 {
     "method": "GET",
     "table": "users",
-    "condition": "status='active'"
+    "condition": { "status": "active" },
+    "limit": 50,
+    "offset": 0,
+    "redact": ["password"]
 }
 ```
 
@@ -153,101 +164,48 @@ Fetches all matching records from a table. The `password` field is automatically
     "table": "users",
     "data": [
         {
-            "id": "1",
+            "id": 1,
             "name": "John Doe",
             "email": "john@example.com",
             "status": "active"
         }
-    ]
+    ],
+    "limit": 50,
+    "offset": 0,
+    "has_more": false
 }
 ```
 
 ---
 
 ### 3. Get Selected Data (`GET_SELECTED`)
-Fetches records matching the condition with optional field column projection.
+Fetches records matching the condition with field projection.
 
 **Request Body (JSON):**
 ```json
 {
     "method": "GET_SELECTED",
     "table": "users",
-    "condition": "status='active'",
-    "fields": "id, name, email"
-}
-```
-
-**Success Response (Status 200):**
-```json
-{
-    "status": 200,
-    "table": "users",
-    "data": [
-        {
-            "id": "1",
-            "name": "John Doe",
-            "email": "john@example.com"
-        }
-    ]
+    "condition": { "status": "active" },
+    "fields": "id, name, email",
+    "limit": 50,
+    "offset": 0
 }
 ```
 
 ---
 
 ### 4. Update Data (`UPDATE`)
-Updates records matching the condition. If the optional `act` parameter is provided and no matching rows are modified, the endpoint automatically falls back to insert the record.
+Updates records matching the condition.
 
 **Request Body (JSON):**
 ```json
 {
     "method": "UPDATE",
     "table": "users",
-    "condition": "id='1'",
+    "condition": { "id": 1 },
     "name": "John Updated",
     "phone": "9876543210"
-}
-```
-
-**Success Response (Status 200 - Updated):**
-```json
-{
-    "err": false,
-    "table": "users",
-    "msg": "Data updated!",
-    "code": 200
-}
-```
-
-**Upsert Response with `act` (Status 200 - Auto-Inserted):**
-```json
-{
-    "err": false,
-    "table": "users",
-    "status": 200,
-    "msg": "Data added!",
-    "code": 200,
-    "id": 16,
-    "data": [
-        {
-            "id": "16",
-            "name": "John Updated",
-            "phone": "9876543210"
-        }
-    ]
-}
-```
-
----
-
-### 5. Delete Data (`DELETE`)
-Deletes records matching the specified condition.
-
-**Request Body (JSON):**
-```json
-{
-    "method": "DELETE",
-    "table": "users",
-    "condition": "id='1'"
 }
 ```
 
@@ -255,7 +213,36 @@ Deletes records matching the specified condition.
 ```json
 {
     "err": false,
+    "status": 200,
     "table": "users",
+    "affected_rows": 1,
+    "msg": "Data updated!",
+    "code": 200
+}
+```
+*(If 0 rows matched, returns `200` with `affected_rows: 0`).*
+
+---
+
+### 5. Delete Data (`DELETE`)
+Deletes records matching the condition.
+
+**Request Body (JSON):**
+```json
+{
+    "method": "DELETE",
+    "table": "users",
+    "condition": { "id": 1 }
+}
+```
+
+**Success Response (Status 200):**
+```json
+{
+    "err": false,
+    "status": 200,
+    "table": "users",
+    "affected_rows": 1,
     "msg": "Data deleted!",
     "code": 200
 }
@@ -263,17 +250,17 @@ Deletes records matching the specified condition.
 
 ---
 
-### 6. Upload Photo & Documents (`UPLOAD_PHOTO` / `UPLOAD_ME`)
-Uploads base64-encoded files securely. 
-
-**Allowed Extensions:** `jpg, jpeg, png, webp, gif, svg, pdf, doc, docx, csv, xlsx`
+### 6. Atomic Transactions (`TRANSACTION`)
+Executes an atomic batch of up to 100 operations. If any operation fails, the entire batch rolls back automatically.
 
 **Request Body (JSON):**
 ```json
 {
-    "method": "UPLOAD_PHOTO",
-    "ext": "png",
-    "document": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    "method": "TRANSACTION",
+    "operations": [
+        { "method": "INSERT", "table": "orders", "data": { "user_id": 1, "total": 99.99 } },
+        { "method": "UPDATE", "table": "users", "condition": { "id": 1 }, "data": { "has_orders": true } }
+    ]
 }
 ```
 
@@ -282,157 +269,109 @@ Uploads base64-encoded files securely.
 {
     "status": 200,
     "err": false,
-    "uri": "https://api.yourdomain.com/uploads/0d9c488349/1700000000_a1b2c3d4.png"
+    "committed": true,
+    "operations_count": 2,
+    "results": [...]
 }
 ```
 
 ---
 
-### 7. Inspect Table Schema (`GET_TABLE`)
-Retrieves the schema and column definitions for a given table via `DESCRIBE`.
+### 7. Hashing Helpers (`HASH_VALUE` / `HASH_COMPARE`)
+Provides server-side bcrypt hashing so plaintext secrets never touch raw tables.
+
+**Hash Value:**
+```json
+{ "method": "HASH_VALUE", "value": "my_secret_password", "cost": 12 }
+```
+`-> { "err": false, "hash": "$2b$12$...", "algorithm": "bcrypt", "cost": 12 }`
+
+**Compare Hash:**
+```json
+{ "method": "HASH_COMPARE", "value": "my_secret_password", "hash": "$2b$12$..." }
+```
+`-> { "err": false, "matches": true }`
+
+---
+
+### 8. Rotate Token (`ROTATE_TOKEN`)
+Immediately revokes the currently presented token and issues a new replacement token.
 
 **Request Body (JSON):**
 ```json
-{
-    "method": "GET_TABLE",
-    "table": "users"
-}
+{ "method": "ROTATE_TOKEN", "expiry": 7 }
+```
+`-> { "status": 200, "err": false, "token": "<NEW_TOKEN>", "revoked_salt": "salt_..." }`
+
+---
+
+### 9. Inspect Table Schema (`GET_TABLE`)
+Retrieves the schema and column definitions for a given table.
+
+```json
+{ "method": "GET_TABLE", "table": "users" }
 ```
 
-**Success Response (Status 200):**
+---
+
+### 10. List Database Tables (`GET_DB`)
+Lists all tables within the active database in standard array-of-objects format.
+
+```json
+{ "method": "GET_DB" }
+```
+**Response:**
 ```json
 {
     "status": 200,
-    "table": "users",
+    "table": "my_db",
     "data": [
-        {
-            "Field": "id",
-            "Type": "int(11)",
-            "Null": "NO",
-            "Key": "PRI",
-            "Default": null,
-            "Extra": "auto_increment"
-        },
-        {
-            "Field": "name",
-            "Type": "text",
-            "Null": "YES",
-            "Key": "",
-            "Default": null,
-            "Extra": ""
-        }
+        { "table": "users" },
+        { "table": "orders" }
     ]
 }
 ```
 
 ---
 
-### 8. List Database Tables (`GET_DB`)
-Lists all tables within the currently authenticated database.
+### 11. Add Columns (`ADD_COLUMNS`)
+Adds column definitions to an existing table and verifies existence.
 
-**Request Body (JSON):**
-```json
-{
-    "method": "GET_DB"
-}
-```
-
-**Success Response (Status 200):**
-```json
-{
-    "status": 200,
-    "table": "database_name",
-    "data": [
-        ["users"],
-        ["orders"],
-        ["products"]
-    ]
-}
-```
-
----
-
-### 9. Create Table (`CREATE_TABLE`)
-Creates a new MySQL table with an `id INT NOT NULL AUTO_INCREMENT PRIMARY KEY`.
-
-**Request Body (JSON):**
-```json
-{
-    "method": "CREATE_TABLE",
-    "table": "customers"
-}
-```
-
-**Success Response (Status 200):**
-```json
-{
-    "status": 200,
-    "err": false,
-    "table": "customers",
-    "msg": "Table created!"
-}
-```
-
----
-
-### 10. Add Columns to Table (`ADD_COLUMNS`)
-Adds column definitions to an existing table via `ALTER TABLE`.
-
-**Request Body (JSON):**
 ```json
 {
     "method": "ADD_COLUMNS",
-    "table": "customers",
-    "columns": [
-        "`address` TEXT DEFAULT NULL",
-        "`city` VARCHAR(100) DEFAULT NULL"
-    ]
+    "table": "users",
+    "columns": ["age INT", "bio TEXT"]
 }
 ```
-*(Accepts either a JSON array or a JSON-encoded string array).*
-
-**Success Response (Status 200):**
+**Response:**
 ```json
 {
     "status": 200,
     "err": false,
-    "table": "customers",
-    "msg": "Columns added!"
+    "table": "users",
+    "created": ["age", "bio"],
+    "existing": []
 }
 ```
 
 ---
 
-## Global Error Response Formats
+## Standard Error Codes
 
-Whenever an exception, validation error, or fatal error occurs, the API returns a structured JSON payload:
+All failures return HTTP 4xx/5xx status codes with standard machine-readable `error_code` fields:
 
-### Unauthorized Error (401)
-```json
-{
-    "status": "error",
-    "message": "Authorization header missing",
-    "code": 401
-}
-```
-
-### Invalid Condition Error (400)
-```json
-{
-    "status": 400,
-    "table": "users",
-    "msg": "Invalid condition. You should not use this kind of condition!",
-    "code": 400
-}
-```
-
-### Runtime Exception Trap (200 JSON Payload)
-```json
-{
-    "status": false,
-    "error_type": "EXCEPTION",
-    "message": "Error details",
-    "file": "/path/to/file",
-    "line": 45
-}
-```
+| Code | Status | Meaning |
+|---|---|---|
+| `RAW_SQL_DISABLED` | 400 | String condition provided instead of JSON object |
+| `CONDITION_REQUIRED` | 400 | Non-empty condition required for read/mutation |
+| `INVALID_CONDITION` | 400 | Malformed predicate or unsupported operator |
+| `INVALID_CONDITION_VALUE` | 400 | Type mismatch on numeric/boolean column |
+| `INVALID_IDENTIFIER` | 400 | Table or column name violates naming pattern |
+| `INVALID_PAGINATION` | 400 | Offset passed without limit or negative limit |
+| `TABLE_NOT_FOUND` | 404 | Table does not exist in schema |
+| `COLUMN_NOT_FOUND` | 400 | Column does not exist in table |
+| `TOKEN_EXPIRED` | 401 | Token expiration timestamp has elapsed |
+| `TOKEN_REVOKED` | 401 | Token salt was revoked via `ROTATE_TOKEN` |
+| `METHOD_NOT_ALLOWED` | 405 | GET request made on POST-only endpoint |
+| `CONNECTION_ERROR` | 503 | Database unreachable with token credentials |
