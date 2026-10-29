@@ -99,10 +99,16 @@ fi
 chmod +x "${BIN_PATH}"
 
 # Test direct execution
-echo "[+] Testing binary execution..."
+echo "[+] Testing binary execution: ${BIN_PATH} ($(stat -c%s "${BIN_PATH}" 2>/dev/null || wc -c < "${BIN_PATH}") bytes)..."
 if ! "${BIN_PATH}" --version >/dev/null 2>&1; then
   echo "[-] Direct execution returned an error. Testing output:"
   "${BIN_PATH}" --version || true
+  echo ""
+  echo "[-] If you see 'GLIBC_2.43 not found', the binary on this server is the OLD GLIBC version (11,159,928 bytes)."
+  echo "[-] Please upload the NEW 100% Statically linked MUSL binary (10,897,136 bytes) from:"
+  echo "[-]   deploy/linux/arm64/devsecit-rust-api"
+  echo ""
+  exit 1
 fi
 
 # 3. Check for port conflicts

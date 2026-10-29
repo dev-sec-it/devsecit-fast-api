@@ -215,13 +215,19 @@ chmod +x "${FINAL_BIN}" 2>/dev/null || true
 chmod +x "${FINAL_ALIAS}" 2>/dev/null || true
 
 # Test execution
-echo -e "[*] Testing binary runtime..."
+echo -e "[*] Testing binary runtime: ${FINAL_BIN} ($(stat -c%s "${FINAL_BIN}" 2>/dev/null || wc -c < "${FINAL_BIN}") bytes)..."
 if "${FINAL_BIN}" --version >/dev/null 2>&1; then
     VER_STR="$("${FINAL_BIN}" --version 2>&1 | head -n 1)"
     echo -e "${GREEN}[+] Binary runtime verified: ${VER_STR}${NC}"
 else
-    echo -e "${YELLOW}[!] Warning: Direct --version test returned non-zero. Testing output:${NC}"
+    echo -e "${RED}[ERROR] Direct execution returned an error. Testing output:${NC}"
     "${FINAL_BIN}" --version || true
+    echo ""
+    echo -e "${YELLOW}[!] If you see 'GLIBC_2.43 not found', the binary on this server is the OLD GLIBC version (11,159,928 bytes).${NC}"
+    echo -e "${YELLOW}[!] Please upload the NEW 100% Statically linked MUSL binary (10,897,136 bytes) from:${NC}"
+    echo -e "${YELLOW}[!]   deploy/linux/arm64/devsecit-rust-api${NC}"
+    echo ""
+    exit 1
 fi
 
 # Check for Port Conflicts & Bindings
