@@ -2,7 +2,8 @@
 set -e
 
 # ==============================================================================
-# DEV SEC IT - DevSecIt Rust API Server Deployment & Service Script
+# DEV SEC IT - Rust API Server Deployment & Service Script
+# Fully isolated from Python / FastAPI pipelines.
 # Supports: x86_64 (amd64) and aarch64 (arm64)
 # ==============================================================================
 
@@ -36,11 +37,11 @@ done
 
 # If port not provided via arguments, interactively ask the user
 if [ -z "${PORT}" ]; then
-  read -p "Enter port number to deploy [default: 8899]: " USER_PORT
+  read -p "Enter port number to deploy [default: 8000]: " USER_PORT
   if [ -n "${USER_PORT}" ]; then
     PORT="${USER_PORT}"
   else
-    PORT="8899"
+    PORT="8000"
   fi
 fi
 
@@ -51,10 +52,10 @@ if ! [[ "${PORT}" =~ ^[0-9]+$ ]] || [ "${PORT}" -lt 1 ] || [ "${PORT}" -gt 65535
 fi
 
 echo "=============================================================================="
-echo ">>> DEV SEC IT - Deploying Rust API on Port ${PORT}..."
+echo ">>> DEV SEC IT - Deploying Rust API Server on Port ${PORT}..."
 echo "=============================================================================="
 
-# 1. Detect Host CPU Architecture (ARM64 vs x86_64)
+# 1. Detect Host CPU Architecture
 ARCH=$(uname -m)
 echo "[+] Detected system architecture: ${ARCH}"
 
@@ -85,6 +86,7 @@ fi
 
 if [ -z "${SELECTED_BIN}" ] || [ ! -f "${SELECTED_BIN}" ]; then
   echo "[-] Error: No compatible binary found for architecture '${ARCH}'."
+  echo "[-] Expected at: ${SCRIPT_DIR}/${ARCH_DIR}/devsecit-rust-api"
   exit 1
 fi
 
@@ -99,16 +101,17 @@ chmod +x "${BIN_PATH}"
 # Test direct execution
 echo "[+] Testing binary execution..."
 if ! "${BIN_PATH}" --version >/dev/null 2>&1; then
-  echo "[-] Execution test failed! Running directly to display error:"
+  echo "[-] Direct execution returned an error. Testing output:"
   "${BIN_PATH}" --version || true
 fi
 
-# 3. Stop Conflicting Legacy Python Service and Free Port
-echo "[+] Checking for port conflicts on port ${PORT}..."
-sudo systemctl stop devsecit-fast-api.service 2>/dev/null || true
-sudo systemctl disable devsecit-fast-api.service 2>/dev/null || true
+# 3. Check for port conflicts
 if command -v fuser >/dev/null 2>&1; then
-  sudo fuser -k "${PORT}/tcp" 2>/dev/null || true
+  if sudo fuser "${PORT}/tcp" >/dev/null 2>&1; then
+    echo "[!] Warning: Port ${PORT} is currently in use by another process."
+    echo "[!] Freeing port ${PORT}..."
+    sudo fuser -k "${PORT}/tcp" 2>/dev/null || true
+  fi
 fi
 
 # 4. Dynamically Generate Systemd Service Unit
