@@ -73,26 +73,18 @@ esac
 # 2. Locate Matching Architecture Binary
 SELECTED_BIN=""
 
-# Check architecture specific subfolder first
 if [ -n "${ARCH_DIR}" ] && [ -f "${SCRIPT_DIR}/${ARCH_DIR}/devsecit-rust-api" ]; then
   SELECTED_BIN="${SCRIPT_DIR}/${ARCH_DIR}/devsecit-rust-api"
 elif [ -n "${ARCH_DIR}" ] && [ -f "${SCRIPT_DIR}/${ARCH_DIR}/dsiapi" ]; then
   SELECTED_BIN="${SCRIPT_DIR}/${ARCH_DIR}/dsiapi"
-# Check script root directory
 elif [ -f "${SCRIPT_DIR}/devsecit-rust-api" ]; then
   SELECTED_BIN="${SCRIPT_DIR}/devsecit-rust-api"
 elif [ -f "${SCRIPT_DIR}/dsiapi" ]; then
   SELECTED_BIN="${SCRIPT_DIR}/dsiapi"
-# Check parent target/release if running in repo build folder
-elif [ -f "${SCRIPT_DIR}/../target/release/devsecit-rust-api" ]; then
-  SELECTED_BIN="${SCRIPT_DIR}/../target/release/devsecit-rust-api"
-elif [ -f "${SCRIPT_DIR}/../target/release/dsiapi" ]; then
-  SELECTED_BIN="${SCRIPT_DIR}/../target/release/dsiapi"
 fi
 
 if [ -z "${SELECTED_BIN}" ] || [ ! -f "${SELECTED_BIN}" ]; then
   echo "[-] Error: No compatible binary found for architecture '${ARCH}'."
-  echo "[-] Expected binary at: ${SCRIPT_DIR}/${ARCH_DIR}/devsecit-rust-api or ${SCRIPT_DIR}/devsecit-rust-api"
   exit 1
 fi
 
@@ -103,9 +95,23 @@ if [ "${SELECTED_BIN}" != "${BIN_PATH}" ]; then
 fi
 
 chmod +x "${BIN_PATH}"
-echo "[+] Binary verified and executable: ${BIN_PATH}"
 
-# 3. Dynamically Generate Systemd Service Unit
+# Test direct execution
+echo "[+] Testing binary execution..."
+if ! "${BIN_PATH}" --version >/dev/null 2>&1; then
+  echo "[-] Execution test failed! Running directly to display error:"
+  "${BIN_PATH}" --version || true
+fi
+
+# 3. Stop Conflicting Legacy Python Service and Free Port
+echo "[+] Checking for port conflicts on port ${PORT}..."
+sudo systemctl stop devsecit-fast-api.service 2>/dev/null || true
+sudo systemctl disable devsecit-fast-api.service 2>/dev/null || true
+if command -v fuser >/dev/null 2>&1; then
+  sudo fuser -k "${PORT}/tcp" 2>/dev/null || true
+fi
+
+# 4. Dynamically Generate Systemd Service Unit
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}"
 
 echo "[+] Creating systemd service: ${SERVICE_FILE}"
@@ -127,16 +133,22 @@ EnvironmentFile=-${SCRIPT_DIR}/.env
 WantedBy=multi-user.target
 EOF
 
-# 4. Activate Service via systemctl
+# 5. Activate Service via systemctl
 echo "[+] Activating service via systemctl..."
 sudo systemctl daemon-reload
 sudo systemctl enable "${SERVICE_NAME}"
 sudo systemctl restart "${SERVICE_NAME}"
+sleep 1
 
-echo ">>> Service status:"
-sudo systemctl status "${SERVICE_NAME}" --no-pager
-
-echo ""
-echo "=============================================================================="
-echo ">>> [SUCCESS] DevSecIt Rust API (${ARCH}) running on: http://0.0.0.0:${PORT}"
-echo "=============================================================================="
+# Check status
+if sudo systemctl is-active --quiet "${SERVICE_NAME}"; then
+  echo ""
+  echo "=============================================================================="
+  echo ">>> [SUCCESS] DevSecIt Rust API (${ARCH}) running on: http://0.0.0.0:${PORT}"
+  echo "=============================================================================="
+else
+  echo "[-] Warning: Service failed to enter active state."
+  echo ">>> Last log entries from journalctl:"
+  sudo journalctl -u "${SERVICE_NAME}" -n 15 --no-pager
+  exit 1
+fi
