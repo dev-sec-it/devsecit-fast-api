@@ -252,7 +252,7 @@ if command -v ss >/dev/null 2>&1 && [ "${PORT_IN_USE}" = false ]; then
     fi
 fi
 
-# Ensure .env exists in target directory
+# Ensure .env exists in target directory (Production defaults)
 if [ ! -f "${TARGET_DIR}/.env" ]; then
     if [ -f "${TARGET_DIR}/.env.example" ]; then
         cp "${TARGET_DIR}/.env.example" "${TARGET_DIR}/.env"
@@ -260,8 +260,14 @@ if [ ! -f "${TARGET_DIR}/.env" ]; then
     elif [ -f "${SCRIPT_DIR}/.env.example" ]; then
         cp "${SCRIPT_DIR}/.env.example" "${TARGET_DIR}/.env"
         echo -e "[+] Created .env from deploy/.env.example"
+    else
+        printf "PORT=${PORT}\nHOST=0.0.0.0\nDEBUG=false\nDEV=false\nAPP_NAME=\"DEV SEC IT Fast API\"\n" > "${TARGET_DIR}/.env"
     fi
 fi
+
+# Ensure /usr/local/bin/dsiapi global command exists
+sudo mkdir -p /usr/local/bin 2>/dev/null || true
+sudo ln -sf "${FINAL_BIN}" /usr/local/bin/dsiapi 2>/dev/null || true
 
 # Create Systemd Service File
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}"
@@ -285,8 +291,9 @@ EnvironmentFile=-${TARGET_DIR}/.env
 WantedBy=multi-user.target
 EOF
 
-# Activate and start service
+# Activate and start service (with alias compatibility)
 echo -e "[*] Registering and activating ${SERVICE_NAME} via systemctl..."
+sudo ln -sf "/etc/systemd/system/${SERVICE_NAME}" "/etc/systemd/system/devsecit-fast-api.service" 2>/dev/null || true
 sudo systemctl daemon-reload
 sudo systemctl enable "${SERVICE_NAME}"
 sudo systemctl restart "${SERVICE_NAME}"
