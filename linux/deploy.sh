@@ -132,7 +132,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=${SCRIPT_DIR}
-ExecStart=${BIN_PATH} start -p ${PORT} --dev --no-gui
+ExecStart=${BIN_PATH} start -p ${PORT} --no-gui
 Restart=always
 RestartSec=3s
 LimitNOFILE=65536
